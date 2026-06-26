@@ -35,3 +35,14 @@ python hex_combine_gui.py
 Drop the bootloader HEX file into the Bootloader box, drop the main application HEX file into the MainApp box, then select `Combine`.
 
 If `tkinterdnd2` is not installed, the GUI still works by typing paths or using the Browse buttons.
+
+## Creating EXE files
+
+```sh
+pip install pyinstaller
+pyinstaller --onefile hex_combine_gui.py
+```
+
+## Remarks
+
+Sponsored by, Suess Labs, Inc. and Xeno Innovations, Inc.
