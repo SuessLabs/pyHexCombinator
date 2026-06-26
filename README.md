@@ -7,7 +7,7 @@ The bootloader file is written first, then the main application file. The input 
 ## Command line
 
 ```powershell
-python hex_combine.py C:\path\Bootloader.hex C:\path\MainApp.hex
+python pyHexCombinator.py C:\path\Bootloader.hex C:\path\MainApp.hex
 ```
 
 By default, `Combined.hex` is created in the bootloader file's folder.
@@ -15,7 +15,7 @@ By default, `Combined.hex` is created in the bootloader file's folder.
 To choose a different output path:
 
 ```powershell
-python hex_combine.py C:\path\Bootloader.hex C:\path\MainApp.hex -o C:\path\Combined.hex
+python pyHexCombinator.py C:\path\Bootloader.hex C:\path\MainApp.hex -o C:\path\Combined.hex
 ```
 
 ## GUI
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 Run the GUI:
 
 ```powershell
-python hex_combine_gui.py
+python pyHexCombinatorGui.py
 ```
 
 Drop the bootloader HEX file into the Bootloader box, drop the main application HEX file into the MainApp box, then select `Combine`.
@@ -40,7 +40,7 @@ If `tkinterdnd2` is not installed, the GUI still works by typing paths or using 
 
 ```sh
 pip install pyinstaller
-pyinstaller --onefile hex_combine_gui.py
+pyinstaller --onefile pyHexCombinatorGui.py
 ```
 
 ## Remarks
