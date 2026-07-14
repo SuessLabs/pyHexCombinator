@@ -8,14 +8,29 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 
 EOF_RECORD = ":00000001FF"
 EOF_RECORD_TYPE = 0x01
 VALID_RECORD_TYPES = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05}
 PathLike = Union[str, Path]
+
+
+@dataclass(frozen=True)
+class HexRecord:
+    byte_count: int
+    address: int
+    record_type: int
+    data: bytes
+
+
+@dataclass(frozen=True)
+class HexFileBody:
+    records: List[str]
+    memory_range: Optional[Tuple[int, int]]
 
 
 class HexFileError(ValueError):
@@ -28,8 +43,8 @@ def _location(source: str, line_number: Optional[int]) -> str:
     return f"{source} line {line_number}"
 
 
-def parse_hex_record(line: str, source: str = "HEX record", line_number: Optional[int] = None) -> int:
-    """Validate one Intel HEX record and return its record type."""
+def parse_hex_record(line: str, source: str = "HEX record", line_number: Optional[int] = None) -> HexRecord:
+    """Validate one Intel HEX record and return its decoded fields."""
     where = _location(source, line_number)
 
     if not line.startswith(":"):
@@ -66,15 +81,24 @@ def parse_hex_record(line: str, source: str = "HEX record", line_number: Optiona
     if record_type == EOF_RECORD_TYPE and (byte_count != 0 or address != 0):
         raise HexFileError(f"{where}: EOF record must have byte count 00 and address 0000.")
 
-    return record_type
+    if record_type in {0x02, 0x04} and (byte_count != 2 or address != 0):
+        raise HexFileError(f"{where}: extended address record is malformed.")
+
+    if record_type in {0x03, 0x05} and (byte_count != 4 or address != 0):
+        raise HexFileError(f"{where}: start address record is malformed.")
+
+    return HexRecord(byte_count=byte_count, address=address, record_type=record_type, data=data)
 
 
-def _read_hex_body(path: Path, label: str) -> List[str]:
+def _read_hex_body(path: Path, label: str) -> HexFileBody:
     if path.suffix.lower() != ".hex":
         raise HexFileError(f"{label} must have a .hex extension: {path}")
 
     records: List[str] = []
     saw_eof = False
+    address_base = 0
+    range_start: Optional[int] = None
+    range_end: Optional[int] = None
 
     try:
         with path.open("r", encoding="utf-8-sig") as hex_file:
@@ -86,11 +110,21 @@ def _read_hex_body(path: Path, label: str) -> List[str]:
                 if saw_eof:
                     raise HexFileError(f"{label} has data after its EOF record at line {line_number}.")
 
-                record_type = parse_hex_record(line, label, line_number)
-                if record_type == EOF_RECORD_TYPE:
+                record = parse_hex_record(line, label, line_number)
+                if record.record_type == EOF_RECORD_TYPE:
                     saw_eof = True
                 else:
                     records.append(line.upper())
+
+                if record.record_type == 0x02:
+                    address_base = int.from_bytes(record.data, byteorder="big") << 4
+                elif record.record_type == 0x04:
+                    address_base = int.from_bytes(record.data, byteorder="big") << 16
+                elif record.record_type == 0x00 and record.byte_count > 0:
+                    data_start = address_base + record.address
+                    data_end = data_start + record.byte_count - 1
+                    range_start = data_start if range_start is None else min(range_start, data_start)
+                    range_end = data_end if range_end is None else max(range_end, data_end)
     except FileNotFoundError as exc:
         raise HexFileError(f"{label} file was not found: {path}") from exc
     except UnicodeDecodeError as exc:
@@ -99,7 +133,24 @@ def _read_hex_body(path: Path, label: str) -> List[str]:
     if not saw_eof:
         raise HexFileError(f"{label} is missing the EOF record {EOF_RECORD}.")
 
-    return records
+    memory_range = None if range_start is None or range_end is None else (range_start, range_end)
+    return HexFileBody(records=records, memory_range=memory_range)
+
+
+def write_mem_range_file(mainapp_body: HexFileBody, output_path: Path) -> Path:
+    """Write mem_range.txt using the MainApp's start address and address span."""
+    if mainapp_body.memory_range is None:
+        raise HexFileError("MainApp does not contain any data records.")
+
+    start_address, end_address = mainapp_body.memory_range
+    address_span = end_address - start_address
+    mem_range_path = output_path.parent / "mem_range.txt"
+
+    with mem_range_path.open("w", encoding="ascii", newline="\n") as mem_range_file:
+        mem_range_file.write(f"#{start_address:08X}\n")
+        mem_range_file.write(f"!{address_span:08X}\n")
+
+    return mem_range_path
 
 
 def default_output_path(bootloader_path: PathLike) -> Path:
@@ -111,8 +162,8 @@ def combine_hex_files(
     bootloader_path: PathLike,
     mainapp_path: PathLike,
     output_path: Optional[PathLike] = None,
-) -> Path:
-    """Combine bootloader and main application HEX files into Combined.hex."""
+) -> Tuple[Path, Path]:
+    """Combine bootloader and main application HEX files and write mem_range.txt."""
     bootloader = Path(bootloader_path).expanduser().resolve()
     mainapp = Path(mainapp_path).expanduser().resolve()
     output = Path(output_path).expanduser().resolve() if output_path else default_output_path(bootloader)
@@ -120,16 +171,17 @@ def combine_hex_files(
     if output == bootloader or output == mainapp:
         raise HexFileError("Output path must be different from both input files.")
 
-    bootloader_records = _read_hex_body(bootloader, "Bootloader")
-    mainapp_records = _read_hex_body(mainapp, "MainApp")
-    combined_records = bootloader_records + mainapp_records + [EOF_RECORD]
+    bootloader_body = _read_hex_body(bootloader, "Bootloader")
+    mainapp_body = _read_hex_body(mainapp, "MainApp")
+    combined_records = bootloader_body.records + mainapp_body.records + [EOF_RECORD]
 
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="ascii", newline="\n") as combined_file:
         for record in combined_records:
             combined_file.write(f"{record}\n")
 
-    return output
+    mem_range_path = write_mem_range_file(mainapp_body, output)
+    return output, mem_range_path
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -149,12 +201,13 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        output = combine_hex_files(args.bootloader, args.mainapp, args.output)
+        output, mem_range_path = combine_hex_files(args.bootloader, args.mainapp, args.output)
     except (HexFileError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
     print(f"Combined HEX written to: {output}")
+    print(f"Memory range written to: {mem_range_path}")
     return 0
 
 

@@ -97,18 +97,18 @@ class HexCombinerApp:
             return
 
         try:
-            output = combine_hex_files(bootloader, mainapp)
+            output, mem_range_path = combine_hex_files(bootloader, mainapp)
         except HexFileError as exc:
             self.status.set("Combine failed")
             messagebox.showerror("Combine failed", str(exc))
             return
         except OSError as exc:
             self.status.set("Combine failed")
-            messagebox.showerror("Combine failed", f"Could not write Combined.hex: {exc}")
+            messagebox.showerror("Combine failed", f"Could not write output files: {exc}")
             return
 
-        self.status.set(f"Created {output}")
-        messagebox.showinfo("Combine complete", f"Created:\n{output}")
+        self.status.set(f"Created {output} and {mem_range_path}")
+        messagebox.showinfo("Combine complete", f"Created:\n{output}\n{mem_range_path}")
 
 
 def main() -> None:

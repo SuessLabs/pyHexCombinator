@@ -4,13 +4,20 @@ PyHexCominator combines two Intel HEX files into one `Combined.hex` file.
 
 The bootloader file is written first, then the main application file. The input EOF records are removed and one final EOF record is added to the combined file.
 
+The tool also creates `mem_range.txt` next to `Combined.hex`. It contains the MainApp start address and address span in uppercase hexadecimal:
+
+```text
+#08020000
+!0003FFFF
+```
+
 ## Command line
 
 ```powershell
 python pyHexCombinator.py C:\path\Bootloader.hex C:\path\MainApp.hex
 ```
 
-By default, `Combined.hex` is created in the bootloader file's folder.
+By default, `Combined.hex` and `mem_range.txt` are created in the bootloader file's folder.
 
 To choose a different output path:
 
