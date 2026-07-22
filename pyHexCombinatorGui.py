@@ -6,7 +6,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-from hex_combine import HexFileError, combine_hex_files
+from pyHexCombinator import HexFileError, combine_hex_files
 
 
 try:
