@@ -1,6 +1,6 @@
 # PyHexCominator
 
-PyHexCominator combines two Intel HEX files into one `Combined.hex` file.
+[pyHexCombinator](https://github.com/SuessLabs/pyHexCombinator) combines two Intel HEX files into one `Combined.hex` file.
 
 The bootloader file is written first, then the main application file. The input EOF records are removed and one final EOF record is added to the combined file.
 
@@ -46,3 +46,4 @@ pyinstaller --onefile pyHexCombinatorGui.py
 ## Remarks
 
 Sponsored by, Suess Labs, Inc. and Xeno Innovations, Inc.
+
